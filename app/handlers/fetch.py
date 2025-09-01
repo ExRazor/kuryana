@@ -1,3 +1,4 @@
+import json
 import re
 from typing import Any, Dict, List
 from urllib.parse import urljoin
@@ -28,7 +29,21 @@ class FetchDrama(BaseFetch):
         self.info["complete_title"] = film_title.get_text().strip()
 
         film_subtitle = container.find("div", class_="film-subtitle")
-        self.info["sub_title"] = film_subtitle.get_text().strip()
+
+        sub_title = film_subtitle.get_text().strip()
+
+        if sub_title:
+            self.info["sub_title"] = sub_title
+
+            # Split the string by the separator '‧'
+            parts = sub_title.split("‧")
+
+            # The year is the last part, remove any leading/trailing whitespace
+            year_str = parts[-1].strip()
+
+            # Check if the extracted string consists of digits and can be an integer
+            if year_str.isdigit():
+                self.info["year"] = year_str.strip()
 
         # RATING (could be either N/A or with number)
         self.info["rating"] = self._handle_rating(
@@ -61,6 +76,24 @@ class FetchDrama(BaseFetch):
                 }
             )
         self.info["casts"] = casts
+
+        # Extract nextEpisodeAiring
+        scripts = self.soup.find_all("script", type="text/javascript")
+        for script in scripts:
+            if script.string and "var nextEpisodeAiring =" in script.string:
+                match = re.search(r"var nextEpisodeAiring = ({.*});", script.string)
+                if match:
+                    next_airing = json.loads(match.group(1))
+                    self.info["next_episode_airing"] = next_airing
+                    current_episode = float(next_airing["episode_number"]) - 1
+                    self.info["current_episode"] = (
+                        "0"
+                        if current_episode < 0
+                        else str(float(next_airing["episode_number"]) - 1).replace(
+                            ".0", ""
+                        )
+                    )
+                break
 
     # get other info
     def _get_other_info(self) -> None:
@@ -106,15 +139,19 @@ class FetchPerson(BaseFetch):
         # these are the most important drama infos / details
 
         # NAME
-        self.info["name"] = container.find("h1", class_="film-title").text
+        self.info["name"] = container.find("h1", class_="film-title").get_text().strip()
 
         # ABOUT?
         __temp_about = container.find("div", class_="col-lg-8 col-md-8").find(
             "div", class_="col-sm-8 col-lg-12 col-md-12"
         )
-        self.info["about"] = __temp_about.text.replace(
-            __temp_about.find("div", class_="hidden-md-up").text.strip(), ""
-        ).strip()
+        self.info["about"] = (
+            __temp_about.text.replace(
+                __temp_about.find("div", class_="hidden-md-up").text.strip(), ""
+            )
+            .replace("Remove ads\n\n", "")
+            .strip()
+        )
 
         # IMAGE
         self.info["profile"] = self._get_poster(container)
@@ -198,7 +235,9 @@ class FetchCast(BaseFetch):
         # these are the most important drama infos / details
 
         # TITLE
-        self.info["title"] = container.find("h1", class_="film-title").find("a").text
+        self.info["title"] = (
+            container.find("h1", class_="film-title").get_text().strip()
+        )
 
         # POSTER
         self.info["poster"] = self._get_poster(container)
@@ -253,7 +292,9 @@ class FetchReviews(BaseFetch):
         # these are the most important drama infos / details
 
         # TITLE
-        self.info["title"] = container.find("h1", class_="film-title").find("a").text
+        self.info["title"] = (
+            container.find("h1", class_="film-title").get_text().strip()
+        )
 
         # POSTER
         self.info["poster"] = self._get_poster(container)
