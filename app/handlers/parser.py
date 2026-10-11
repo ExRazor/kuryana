@@ -22,7 +22,6 @@ class Parser:
 
     headers: Dict[str, str] = {
         "Referer": MYDRAMALIST_WEBSITE,
-        "User-Agent": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.123 Mobile Safari/537.36",
     }
 
     def __init__(
@@ -48,7 +47,7 @@ class Parser:
         soup = None
 
         try:
-            client = primp.Client(impersonate="chrome_131", impersonate_os="linux")
+            client = primp.Client(impersonate="chrome", impersonate_os="linux")
             resp = client.get(url, headers=Parser.headers)
 
             # set the main soup var
