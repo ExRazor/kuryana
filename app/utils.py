@@ -9,7 +9,9 @@ from app.handlers.fetch import (
     FetchPerson,
     FetchReviews,
 )
+from app.handlers.parser import Parser
 from app.handlers.search import Search
+from app.handlers.seasonal import parse_seasonal
 
 
 def error(code: int, description: str) -> Dict[str, Any]:
@@ -56,3 +58,16 @@ async def fetch_func(query: str, t: str) -> Tuple[int, Dict[str, Any]]:
         f._get()
 
     return f.status_code, f.fetch()
+
+
+# seasonal function
+async def seasonal_func(year: int, quarter: int) -> Tuple[int, Dict[str, Any]]:
+    f = await Parser.scrape(query=f"episode-calendar/q{quarter}-{year}", t="page")
+    if not f.ok or f.soup is None:
+        return f.status_code, error(f.status_code, "An unexpected error occurred.")
+
+    return f.status_code, {
+        "year": year,
+        "quarter": quarter,
+        "data": parse_seasonal(f.soup),
+    }

@@ -1,11 +1,10 @@
 from typing import Any, Dict
 
-import primp
 from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.lib.msgspec_json import MsgSpecJSONResponse
-from app.utils import fetch_func, search_func
+from app.utils import error, fetch_func, search_func, seasonal_func
 
 app = FastAPI(
     title="Kuryana",
@@ -93,16 +92,15 @@ async def lists(list_id: str, response: Response) -> Dict[str, Any]:
     return r
 
 
-# get seasonal drama list -- official api available, use it with cloudflare bypass
+# get seasonal drama list, scraped from the episode calendar page
 @app.get("/seasonal/{year}/{quarter}")
-async def mdlSeasonal(year: int, quarter: int) -> Any:
-    # year -> ex. ... / 2019 / 2020 / 2021 / ...
+async def mdlSeasonal(year: int, quarter: int, response: Response) -> Dict[str, Any]:
     # quarter -> every 3 months (Jan-Mar=1, Apr-Jun=2, Jul-Sep=3, Oct-Dec=4)
-    # --- seasonal information --- winter --- spring --- summer --- fall ---
+    if quarter not in (1, 2, 3, 4):
+        response.status_code = 400
+        return error(400, "Quarter must be between 1 and 4.")
 
-    client = primp.Client(impersonate="chrome", impersonate_os="linux")
+    code, r = await seasonal_func(year=year, quarter=quarter)
 
-    return client.post(
-        "https://mydramalist.com/v1/quarter_calendar",
-        data={"quarter": quarter, "year": year},
-    ).json()
+    response.status_code = code
+    return r

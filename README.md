@@ -73,10 +73,11 @@ GET /id/{mydramalist-slug}/reviews
 GET /people/{people-id}
 ```
 
-- Get seasonal drama
+- Get seasonal drama (quarter is 1-4; scraped from the episode calendar)
 
 ```sh
 GET /seasonal/{year}/{quarter}
+# -> {"year", "quarter", "data": [{id, slug, link, title, type, cover, rating, release_date, synopsis, genres}]}
 ```
 
 - Get Lists
