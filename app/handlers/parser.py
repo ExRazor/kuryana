@@ -1,3 +1,6 @@
+import asyncio
+import os
+import threading
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Type, TypeVar, Union
 from urllib.parse import urljoin
@@ -15,6 +18,35 @@ ScrapeTypes = {
     "search": urljoin(MYDRAMALIST_WEBSITE, "search?q="),
     "page": MYDRAMALIST_WEBSITE,
 }
+
+# rotate browser fingerprints; firefox/safari pass Cloudflare far more reliably
+# than the Chromium TLS fingerprint from datacenter IPs
+IMPERSONATE_PROFILES = ("firefox", "safari", "chrome")
+REQUEST_TIMEOUT = 10  # seconds
+RETRY_STATUSES = frozenset({403, 429, 503})
+
+_clients: Dict[str, primp.Client] = {}
+_clients_lock = threading.Lock()
+
+
+def _client_for(profile: str) -> primp.Client:
+    """Shared client per profile so cf_bm cookies survive across requests."""
+    with _clients_lock:
+        client = _clients.get(profile)
+        if client is None:
+            client = primp.Client(
+                impersonate=profile,
+                timeout=REQUEST_TIMEOUT,
+                proxy=os.environ.get("SCRAPER_PROXY") or None,
+            )
+            _clients[profile] = client
+        return client
+
+
+def _is_challenge(resp: primp.Response) -> bool:
+    if resp.status_code in RETRY_STATUSES:
+        return True
+    return str(resp.headers.get("cf-mitigated") or "").lower() == "challenge"
 
 
 class Parser:
@@ -42,26 +74,31 @@ class Parser:
         if t == "search":
             url = ScrapeTypes[t] + query
 
-        ok = True
+        ok = False
         code = 500  # default to 500, internal server error
         soup = None
 
-        try:
-            client = primp.Client(impersonate="chrome", impersonate_os="linux")
-            resp = client.get(url, headers=Parser.headers)
+        for profile in IMPERSONATE_PROFILES:
+            try:
+                # primp is sync; keep the event loop free while it blocks
+                resp = await asyncio.to_thread(
+                    _client_for(profile).get, url, headers=Parser.headers
+                )
+            except Exception:
+                continue  # timeout/connect error -> try the next profile
+
+            code = resp.status_code
+            ok = resp.status_code == 200
+
+            if _is_challenge(resp):
+                continue  # Cloudflare block -> rotate fingerprint
 
             # set the main soup var
             soup = BeautifulSoup(
                 resp.text,
-                "html.parser",  # use `lxml` parser for better speed
+                "html.parser",
             )
-
-            # set the status code
-            code = resp.status_code
-            ok = resp.status_code == 200
-
-        except Exception:
-            ok = False
+            break
 
         return cls(soup, query, code, ok)
 

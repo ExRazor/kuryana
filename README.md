@@ -35,6 +35,19 @@ Make sure to set `deploy/vercel` as the branch.
 > [!NOTE]
 > Deployed vercel project will still continue to live.
 
+## Configuration
+
+### `SCRAPER_PROXY` (optional)
+
+Outbound requests to MyDramaList go through this proxy (HTTP or SOCKS URL), e.g.
+`http://user:pass@host:port` or `socks5://host:port`. Unset (default) = direct
+connection.
+
+Useful when the host's egress IPs (e.g. Vercel/AWS) get blocked by Cloudflare:
+point it at a residential proxy or unblocker service. Set it as an environment
+variable — Vercel: Project Settings → Environment Variables; Docker: add it to
+the service `environment:` in your compose file.
+
 ## API Use
 
 - Search for dramas

@@ -9,7 +9,7 @@ from app.handlers.fetch import (
     FetchPerson,
     FetchReviews,
 )
-from app.handlers.parser import Parser
+from app.handlers.parser import RETRY_STATUSES, Parser
 from app.handlers.search import Search
 from app.handlers.seasonal import parse_seasonal
 
@@ -30,7 +30,10 @@ async def search_func(query: str) -> Tuple[int, Dict[str, Any]]:
     if not f.ok:
         return f.status_code, error(f.status_code, "An unexpected error occurred.")
     else:
-        f._get_search_results()
+        try:
+            f._get_search_results()
+        except Exception:
+            return 502, error(502, "Failed to parse MyDramaList page.")
 
     return f.status_code, f.search()
 
@@ -53,9 +56,20 @@ async def fetch_func(query: str, t: str) -> Tuple[int, Dict[str, Any]]:
 
     f = await fs[t].scrape(query=query, t="page")
     if not f.ok:
-        return f.status_code, f.res_get_err()
-    else:
+        err = f.res_get_err()
+        if not err:
+            # no parsable MDL error page: Cloudflare block or upstream failure
+            if f.status_code in RETRY_STATUSES:
+                return f.status_code, error(
+                    f.status_code, "Blocked by Cloudflare. Try again later."
+                )
+            return f.status_code, error(f.status_code, "Upstream error.")
+        return f.status_code, err
+
+    try:
         f._get()
+    except Exception:
+        return 502, error(502, "Failed to parse MyDramaList page.")
 
     return f.status_code, f.fetch()
 
